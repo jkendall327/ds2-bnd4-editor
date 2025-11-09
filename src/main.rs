@@ -268,8 +268,10 @@ fn set_ng(usr: &mut [u8], new_value: u32) -> Result<()> {
 fn reencrypt_entry_into(sl2: &mut [u8], e: &DecryptedEntry) -> Result<()> {
     let meta = &e.meta;
 
-    // Reconstruct the pre-encryption buffer: [len_le i32] + plaintext + zero padding to 16B boundary
-    let mut buf = Vec::with_capacity(4 + e.plaintext.len() + 16);
+    // Reconstruct the pre-encryption buffer to match real SL2 layout:
+    // [16 bytes junk][len_le i32][payload][zero padding to 16B boundary]
+    let mut buf = Vec::with_capacity(16 + 4 + e.plaintext.len() + 16);
+    buf.extend_from_slice(&[0u8; 16]); // junk/pseudo-IV shadow; contents don’t matter
     let len_le = (e.plaintext.len() as i32).to_le_bytes();
     buf.extend_from_slice(&len_le);
     buf.extend_from_slice(&e.plaintext);
