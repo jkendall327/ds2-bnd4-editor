@@ -13,9 +13,16 @@ const DS2_KEY: [u8; 16] = [
     0x59, 0x9f, 0x9b, 0x69, 0x96, 0x40, 0xa5, 0x52, 0x36, 0xee, 0x2d, 0x70, 0x83, 0x5e, 0xc7, 0x44,
 ];
 
+/// Magic key for BND4 archives.
 const BND4_MAGIC: &[u8; 4] = b"BND4";
+
+/// Known length of headers for BND4 archives.
 const BND4_HEADER_LEN: usize = 64;
+
+/// Known length of headers for individual entries within BND4 archives.
 const BND4_ENTRY_HEADER_LEN: usize = 32;
+
+/// Magic key for BND4 entries.
 const ENTRY_MAGIC: [u8; 8] = [0x50, 0, 0, 0, 0xff, 0xff, 0xff, 0xff];
 
 /// Python: hex_pattern1_Fixed = "0A 00 00 00 6C 00 00 00 BC 00 01"
@@ -60,10 +67,14 @@ enum Command {
 #[derive(Clone)]
 struct EntryMeta {
     index: usize,
-    size_total: usize,  // header[8..12]
+    /// Total size of this entry’s data block — includes MD5 + IV + ciphertext.
+    size_total: usize, // header[8..12]
+    /// Offset (from start of file) where the entry’s encrypted data begins.
     data_offset: usize, // header[16..20]
+    /// Offset (from start of file) where a null-terminated string (the entry’s name) lives.
     name_offset: usize, // header[20..24]
-    footer_len: usize,  // header[24..28]
+    /// Usually small; the game may append some unused padding or metadata. The code keeps it in case you need to rebuild the archive.
+    footer_len: usize, // header[24..28]
 }
 
 #[derive(Clone)]
