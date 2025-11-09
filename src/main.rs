@@ -6,7 +6,7 @@ use cbc::{
     Decryptor, Encryptor,
 };
 use clap::{Parser, Subcommand};
-use md_5::{Digest, Md5};
+use md5::{Digest, Md5};
 use std::{fs, path::PathBuf};
 
 const DS2_KEY: [u8; 16] = [
@@ -282,8 +282,9 @@ fn reencrypt_entry_into(sl2: &mut [u8], e: &DecryptedEntry) -> Result<()> {
 
     // Encrypt with original IV
     let mut ct = buf.clone();
+    let ct_len = ct.len();
     let enc = Encryptor::<Aes128>::new_from_slices(&DS2_KEY, &e.iv)?;
-    enc.encrypt_padded_mut::<NoPadding>(&mut ct)
+    enc.encrypt_padded_mut::<NoPadding>(&mut ct, ct_len)
         .map_err(|_| anyhow!("AES encrypt failed"))?;
 
     // Compute MD5 of ciphertext
