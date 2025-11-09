@@ -1,0 +1,11 @@
+[package]
+name = "ds2-save-editor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+aes = "0.8"
+cbc = "0.1"
+byteorder = "1"
+encoding_rs = "0.8"   # for UTF-16LE to UTF-8
