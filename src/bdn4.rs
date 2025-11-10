@@ -1,5 +1,5 @@
 use aes::Aes128;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Error, Result};
 use byteorder::{ByteOrder, LittleEndian};
 use cbc::{
     cipher::{block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, KeyIvInit},
@@ -42,8 +42,6 @@ pub struct DecryptedEntry {
     pub meta: EntryMeta,
     pub name: String,
     pub iv: [u8; 16],
-    /// Raw encrypted BLOCK (without the 16-byte checksum), as in file.
-    pub encrypted: Vec<u8>,
     /// Decrypted payload after trimming (skip 20 bytes; cut to embedded length).
     pub plaintext: Vec<u8>,
 }
@@ -71,43 +69,59 @@ pub fn decrypt_all(buf: &[u8], key: &[u8]) -> Result<Vec<DecryptedEntry>> {
         if meta.size_total < 32 {
             continue;
         }
-        let iv = &buf[meta.data_offset + 16..meta.data_offset + 32];
-        let mut iv_arr = [0u8; 16];
-        iv_arr.copy_from_slice(iv);
 
-        let encrypted = &buf[meta.data_offset + 16..meta.data_offset + meta.size_total];
-        let mut ct = encrypted.to_vec();
-
-        // Decrypt (NoPadding; format embeds len)
-        let dec = Decryptor::<Aes128>::new_from_slices(key, &iv_arr)?;
-        dec.decrypt_padded_mut::<NoPadding>(&mut ct)
-            .map_err(|_| anyhow!("AES decrypt failed for entry {i}"))?;
-
-        // Trim: first 16 bytes junk, next 4 bytes (LE i32) embedded length
-        let plaintext = if ct.len() >= 20 {
-            let em_len = LittleEndian::read_i32(&ct[16..20]);
-            let start = 20usize;
-            let mut end = start.saturating_add(em_len.max(0) as usize);
-            if em_len < 0 || end > ct.len() {
-                end = ct.len();
-            }
-            ct[start..end].to_vec()
-        } else if ct.len() > 16 {
-            ct[16..].to_vec()
-        } else {
-            Vec::new()
-        };
+        let (iv_arr, plaintext) = decrypt_entry(buf, key, meta.data_offset, meta.size_total)?;
 
         out.push(DecryptedEntry {
             meta,
             name,
             iv: iv_arr,
-            encrypted: encrypted.to_vec(),
             plaintext,
         });
     }
 
     Ok(out)
+}
+
+pub fn decrypt_entry(
+    buf: &[u8],
+    key: &[u8],
+    data_offset: usize,
+    size_total: usize,
+) -> Result<([u8; 16], Vec<u8>)> {
+    let iv = &buf[data_offset + 16..data_offset + 32];
+    let mut iv_arr = [0u8; 16];
+    iv_arr.copy_from_slice(iv);
+
+    let encrypted = &buf[data_offset + 16..data_offset + size_total];
+    let mut ct = encrypted.to_vec();
+
+    // Decrypt (NoPadding; format embeds len)
+    let dec = Decryptor::<Aes128>::new_from_slices(key, &iv_arr)?;
+
+    dec.decrypt_padded_mut::<NoPadding>(&mut ct)
+        .map_err(|_| anyhow!("AES decrypt failed for entry"))?;
+
+    // Trim: first 16 bytes junk, next 4 bytes (LE i32) embedded length
+    let plaintext = if ct.len() >= 20 {
+        let em_len = LittleEndian::read_i32(&ct[16..20]);
+
+        let start = 20usize;
+
+        let mut end = start.saturating_add(em_len.max(0) as usize);
+
+        if em_len < 0 || end > ct.len() {
+            end = ct.len();
+        }
+
+        ct[start..end].to_vec()
+    } else if ct.len() > 16 {
+        ct[16..].to_vec()
+    } else {
+        Vec::new()
+    };
+
+    Ok((iv_arr, plaintext))
 }
 
 pub fn ensure_bnd4(buf: &[u8]) -> Result<()> {
