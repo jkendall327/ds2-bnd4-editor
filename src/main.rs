@@ -5,9 +5,11 @@ use cbc::{
     cipher::{block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, KeyIvInit},
     Decryptor, Encryptor,
 };
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use md5::{Digest, Md5};
-use std::{fs, path::PathBuf};
+use std::fs;
+
+mod cli;
 
 const DS2_KEY: [u8; 16] = [
     0x59, 0x9f, 0x9b, 0x69, 0x96, 0x40, 0xa5, 0x52, 0x36, 0xee, 0x2d, 0x70, 0x83, 0x5e, 0xc7, 0x44,
@@ -34,36 +36,6 @@ const ANCHOR_PATTERN: &[u8] = &[
 /// Python: ng_distance = -6664 (relative to anchor)
 const NG_DISTANCE: isize = -6664;
 
-#[derive(Parser)]
-#[command(
-    version,
-    about = "Dark Souls II SL2 (PC) decrypt/edit/repack (NG only)"
-)]
-struct Cli {
-    /// Input .sl2 file
-    input: PathBuf,
-
-    /// Output .sl2 path (required for set-ng)
-    #[arg(long)]
-    output: Option<PathBuf>,
-
-    #[command(subcommand)]
-    cmd: Command,
-}
-
-#[derive(Subcommand)]
-enum Command {
-    /// Show entry list (index + name) and NG value if found
-    Show,
-    /// Set NG value for a given entry index (0-based BND4 entry that contains USERDATA)
-    SetNg {
-        /// Entry index (as reported by `show`)
-        entry: usize,
-        /// New NG value (u32)
-        value: u32,
-    },
-}
-
 #[derive(Clone)]
 struct EntryMeta {
     index: usize,
@@ -89,12 +61,12 @@ struct DecryptedEntry {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = cli::Cli::parse();
     let mut sl2 = fs::read(&cli.input).with_context(|| "Failed to read input .sl2")?;
     ensure_bnd4(&sl2)?;
 
     match cli.cmd {
-        Command::Show => {
+        cli::Command::Show => {
             let entries = decrypt_all(&sl2)?;
             for e in &entries {
                 // NG probe (optional)
@@ -105,7 +77,7 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Command::SetNg { entry, value } => {
+        cli::Command::SetNg { entry, value } => {
             let output = cli
                 .output
                 .as_ref()
