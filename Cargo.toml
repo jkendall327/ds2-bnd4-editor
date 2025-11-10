@@ -10,3 +10,6 @@ cbc = "0.1"
 byteorder = "1"
 clap = { version = "4", features = ["derive"] }
 md-5 = "0.10"   # crate name is "md-5"
+dotenvy = "0.15"
+hex = "0.4"
+base64 = "0.22.1"

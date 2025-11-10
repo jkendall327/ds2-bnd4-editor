@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use std::fs;
 
@@ -60,4 +60,40 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn load_ds2_key() -> Result<[u8; 16]> {
+    // Load .env if present (no error if missing)
+    let _ = dotenvy::dotenv();
+
+    // Prefer HEX; allow BASE64 fallback if you want it
+    if let Ok(s) = std::env::var("DS2_KEY") {
+        let bytes = hex::decode(s.trim())
+            .with_context(|| "DS2_KEY must be hex (e.g., 32 hex chars for 16 bytes)")?;
+        if bytes.len() != 16 {
+            bail!(
+                "DS2_KEY must decode to exactly 16 bytes, got {}",
+                bytes.len()
+            );
+        }
+        let mut arr = [0u8; 16];
+        arr.copy_from_slice(&bytes);
+        Ok(arr)
+    } else if let Ok(s) = std::env::var("DS2_KEY_BASE64") {
+        let bytes = base64::decode(s.trim())
+            .with_context(|| "DS2_KEY_BASE64 must be valid base64 for 16 bytes")?;
+        if bytes.len() != 16 {
+            bail!(
+                "DS2_KEY_BASE64 must decode to exactly 16 bytes, got {}",
+                bytes.len()
+            );
+        }
+        let mut arr = [0u8; 16];
+        arr.copy_from_slice(&bytes);
+        Ok(arr)
+    } else {
+        Err(anyhow!(
+            "Missing DS2_KEY (hex) or DS2_KEY_BASE64 (base64) in environment"
+        ))
+    }
 }
