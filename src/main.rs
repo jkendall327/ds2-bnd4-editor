@@ -5,10 +5,6 @@ use std::fs;
 mod bdn4;
 mod cli;
 
-const DS2_KEY: [u8; 16] = [
-    0x59, 0x9f, 0x9b, 0x69, 0x96, 0x40, 0xa5, 0x52, 0x36, 0xee, 0x2d, 0x70, 0x83, 0x5e, 0xc7, 0x44,
-];
-
 const ANCHOR_PATTERN: &[u8] = &[
     0x0A, 0x00, 0x00, 0x00, 0x6C, 0x00, 0x00, 0x00, 0xBC, 0x00, 0x01,
 ];
@@ -20,9 +16,11 @@ fn main() -> Result<()> {
 
     bdn4::ensure_bnd4(&sl2)?;
 
+    let ds2_key = load_ds2_key()?; // <--- load from env
+
     match cli.cmd {
         cli::Command::Show => {
-            let entries = bdn4::decrypt_all(&sl2, &DS2_KEY)?;
+            let entries = bdn4::decrypt_all(&sl2, &ds2_key)?;
 
             for e in &entries {
                 let ng = bdn4::find_ng(&e.plaintext, ANCHOR_PATTERN).map(|(_, v)| v);
@@ -39,7 +37,7 @@ fn main() -> Result<()> {
                 .as_ref()
                 .ok_or_else(|| anyhow!("--output is required for set-ng"))?;
 
-            let mut entries = bdn4::decrypt_all(&sl2, &DS2_KEY)?;
+            let mut entries = bdn4::decrypt_all(&sl2, &ds2_key)?;
 
             let e = entries
                 .iter_mut()
@@ -50,7 +48,7 @@ fn main() -> Result<()> {
             bdn4::set_ng(&mut e.plaintext, value, ANCHOR_PATTERN)?;
 
             // Re-encrypt this entry back into the sl2 buffer (checksum + ciphertext).
-            bdn4::reencrypt_entry_into(&mut sl2, e, &DS2_KEY)?;
+            bdn4::reencrypt_entry_into(&mut sl2, e, &ds2_key)?;
 
             // Write output
             fs::write(output, &sl2).with_context(|| "Failed to write output .sl2")?;
@@ -64,7 +62,7 @@ fn main() -> Result<()> {
 
 fn load_ds2_key() -> Result<[u8; 16]> {
     // Load .env if present (no error if missing)
-    let _ = dotenvy::dotenv();
+    dotenvy::dotenv()?;
 
     // Prefer HEX; allow BASE64 fallback if you want it
     if let Ok(s) = std::env::var("DS2_KEY") {
